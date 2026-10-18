@@ -1,0 +1,286 @@
+@startuml hermes
+' SPDX-License-Identifier: MIT
+'
+' Class diagram of the public API in ba7lya::hermes.
+' Render with: plantuml uml/hermes.uml
+
+hide circle
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+
+title Hermes — public API (ba7lya::hermes)
+
+package "protocol vocabulary" {
+    class error_info {
+        +code_ : error_code
+        +text_ : string
+    }
+    enum error_code {
+        NONE
+        IMPLEMENTATION
+        PEER
+        CLIENT
+        NETWORK
+        TIMEOUT
+        UNSUPPORTED
+        MALFORMED
+    }
+    enum channel_state {
+        NOT_CONNECTED
+        SOCKET_CONNECTED
+        SERVICE_DESCRIPTION_DOWNSTREAM
+        NOT_AVAILABLE_NOT_READY
+        BOARD_AVAILABLE
+        MACHINE_READY
+        AVAILABLE_AND_READY
+        TRANSPORTING
+        TRANSPORT_STOPPED
+        TRANSPORT_FINISHED
+        DISCONNECTED
+    }
+    enum vertical_state {
+        NOT_CONNECTED
+        SOCKET_CONNECTED
+        SUPERVISORY_SERVICE_DESCRIPTION
+        CONNECTED
+        DISCONNECTED
+    }
+    enum board_quality {
+        ANY
+        GOOD
+        FAILED
+    }
+    enum flipped_board {
+        UNKNOWN
+        TOP_SIDE_UP
+        BOTTOM_SIDE_UP
+    }
+    enum sub_board_state {
+        UNKNOWN
+        GOOD
+        FAILED
+        MISSING
+        SKIP
+    }
+    enum transfer_state {
+        NOT_STARTED
+        INCOMPLETE
+        COMPLETE
+    }
+    enum arrival_transfer {
+        TRANSFERRED
+        LOADED
+        INSERTED
+    }
+    enum departure_transfer {
+        TRANSFERRED
+        UNLOADED
+        REMOVED
+    }
+    enum reply_work_order_status {
+        REJECTED
+        ACCEPTED_AND_READY
+        ACCEPTED_AND_QUEUED
+    }
+    enum severity {
+        FATAL
+        FAILURE
+        WARNING
+        INFO
+    }
+    enum notification_code {
+        UNSPECIFIED
+        PROTOCOL_ERROR
+    }
+    enum command_code {
+        UNDEFINED
+        LOCK_INPUT_CONVEYOR
+    }
+    class sub_board {
+        +pos_ : uint16
+        +barcode_ : optional<string>
+        +state_ : sub_board_state
+    }
+    class supported_features {
+        +check_alive_response_ : bool
+        +board_forecast_ : bool
+        +query_board_info_ : bool
+        +send_board_info_ : bool
+        +command_ : bool
+    }
+    class supervisory_features {
+        +configuration_ : bool
+        +check_alive_response_ : bool
+        +board_tracking_ : bool
+        +query_work_order_info_ : bool
+        +send_work_order_info_ : bool
+        +reply_work_order_info_ : bool
+        +query_hermes_capabilities_ : bool
+        +send_hermes_capabilities_ : bool
+    }
+    class optional_messages
+    class attribute_capabilities
+    class upstream_configuration
+    class downstream_configuration
+    class connection_info {
+        +address_ : string
+        +port_ : uint16
+    }
+}
+
+package "messages" {
+    class check_alive
+    class service_description
+    class notification
+    class board_available
+    class revoke_board_available
+    class machine_ready
+    class revoke_machine_ready
+    class start_transport
+    class stop_transport
+    class transport_finished
+    class set_configuration
+    class get_configuration
+    class current_configuration
+    class board_forecast
+    class query_board_info
+    class send_board_info
+    class supervisory_service_description
+    class board_arrived
+    class board_departed
+    class query_work_order_info
+    class send_work_order_info
+    class reply_work_order_info
+    class command
+    class query_hermes_capabilities
+    class send_hermes_capabilities
+
+    class any_message <<std::variant>> {
+        ---
+        one alternative per message above
+    }
+    class envelope {
+        +timestamp_ : optional<string>
+        +message_ : any_message
+    }
+}
+
+package "codec" {
+    class xml <<namespace>> {
+        +to_xml(any_message) : string
+        +to_xml(envelope) : string
+        +parse(string_view) : expected<envelope, error_info>
+        +format_timestamp(time_point) : string
+    }
+}
+
+package "settings" {
+    class downstream_settings
+    class upstream_settings
+    class vertical_service_settings
+    class vertical_client_settings
+    class configuration_service_settings
+}
+
+package "facades" {
+    class downstream {
+        +start()
+        +stop()
+        +apply(downstream_settings)
+        +send(session_id, any_message) : expected<void, error_info>
+        +send_raw(session_id, string_view) : expected<void, error_info>
+        +port() : uint16
+        +on_connected(connected_handler)
+        +on_disconnected(disconnected_handler)
+        +on_state(state_handler)
+        +on_message(message_handler)
+        +on_trace(trace_handler)
+        +on_error(error_handler)
+        +on_listening(listening_handler)
+    }
+    class upstream {
+        +start()
+        +stop()
+        +apply(upstream_settings)
+        +send(session_id, any_message) : expected<void, error_info>
+        +send_raw(session_id, string_view) : expected<void, error_info>
+        +on_message(message_handler)
+        ...
+    }
+    class vertical_service {
+        +start()
+        +stop()
+        +apply(vertical_service_settings)
+        +send(session_id, any_message)
+        +broadcast(any_message)
+        +port() : uint16
+        +on_message(vertical_message_handler)
+        ...
+    }
+    class vertical_client {
+        +start()
+        +stop()
+        +apply(vertical_client_settings)
+        +send(session_id, any_message)
+        +on_message(vertical_message_handler)
+        ...
+    }
+    class configuration_service {
+        +start()
+        +stop()
+        +apply(configuration_service_settings)
+        +on_set_configuration(set_handler)
+        +on_get_configuration(get_handler)
+        +port() : uint16
+    }
+    class configuration_client <<namespace>> {
+        +read_configuration(address, port, timeout) : expected<configuration_reply, error_info>
+        +write_configuration(address, set_configuration, port, timeout) : expected<configuration_reply, error_info>
+    }
+}
+
+envelope *-- any_message
+any_message *-- board_available
+any_message *-- service_description
+any_message *-- notification
+any_message *-- command
+any_message *-- send_hermes_capabilities
+envelope ..> xml : parse / to_xml
+
+board_available *-- sub_board
+service_description *-- supported_features
+supervisory_service_description *-- supervisory_features
+send_hermes_capabilities *-- optional_messages
+send_hermes_capabilities *-- attribute_capabilities
+set_configuration *-- upstream_configuration
+set_configuration *-- downstream_configuration
+current_configuration *-- upstream_configuration
+current_configuration *-- downstream_configuration
+
+downstream ..> downstream_settings
+downstream ..> any_message : sends
+upstream ..> upstream_settings
+upstream ..> any_message : sends
+vertical_service ..> vertical_service_settings
+vertical_client ..> vertical_client_settings
+configuration_service ..> configuration_service_settings
+configuration_service ..> current_configuration : answers
+configuration_client ..> set_configuration
+configuration_client ..> current_configuration
+
+downstream ..> channel_state
+upstream ..> channel_state
+vertical_service ..> vertical_state
+vertical_client ..> vertical_state
+notification *-- severity
+notification *-- notification_code
+board_available *-- board_quality
+board_available *-- flipped_board
+board_arrived *-- arrival_transfer
+board_departed *-- departure_transfer
+stop_transport *-- transfer_state
+transport_finished *-- transfer_state
+command *-- command_code
+reply_work_order_info *-- reply_work_order_status
+
+@enduml

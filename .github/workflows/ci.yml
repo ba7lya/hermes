@@ -1,0 +1,366 @@
+# SPDX-License-Identifier: MIT
+#
+# One build job per compiler family and sanitizer, plus the two lint jobs. The preset names are
+# the CI contract: <os>-<compiler>-<version>-<arch>[-<san>], with -dbg / -rel build presets and a
+# -test test preset per configure preset.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  VCPKG_COMMIT: bf19794383e8fb95eba5aa553235bc8ec2271688
+  HERMES_CONFIGURE_FLAGS: >-
+    -Dba7lya.hermes_BUILD_TEST=ON
+    -Dba7lya.hermes_BUILD_BENCHMARK=ON
+    -Dba7lya.hermes_BUILD_EXAMPLE=ON
+  VCPKG_DISABLE_METRICS: 1
+  VCPKG_BINARY_SOURCES: clear;default,readwrite
+
+jobs:
+  windows-msvc:
+    name: ${{ matrix.job_stem || matrix.preset }}-${{ matrix.config_name }}${{ matrix.sanitizer_suffix || '' }}
+    runs-on: windows-2022
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        preset: [win-msvc-2022-x64, win-msvc-2022-x64-asan, win-msvc-2022-x86]
+        config: [Debug, Release]
+        include:
+          - config: Debug
+            config_name: dbg
+          - config: Release
+            config_name: rel
+          - preset: win-msvc-2022-x64
+            arch: x64
+          - preset: win-msvc-2022-x64-asan
+            job_stem: win-msvc-2022-x64
+            sanitizer_suffix: '-asan'
+            arch: x64
+          - preset: win-msvc-2022-x86
+            arch: x86
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          submodules: false
+          persist-credentials: false
+
+      - uses: rzlamrr/msvc-dev-cmd@70b9da25ce35e6470a3bd4be4b4a1a4929a61925 # v2
+        with:
+          arch: ${{ matrix.arch }}
+
+      - uses: ./.github/actions/setup-vcpkg
+        with:
+          vcpkg_commit: ${{ env.VCPKG_COMMIT }}
+          cache_key: ${{ matrix.preset }}
+
+      - name: configure
+        shell: cmd
+        run: >
+          cmake --preset ${{ matrix.preset }}
+          -DCMAKE_TOOLCHAIN_FILE="%VCPKG_ROOT%/scripts/buildsystems/vcpkg.cmake"
+          %HERMES_CONFIGURE_FLAGS%
+
+      - name: build
+        run: cmake --build --preset ${{ matrix.preset }}-${{ matrix.config == 'Debug' && 'dbg' || 'rel' }}
+
+      - name: test
+        env:
+          ASAN_OPTIONS: detect_leaks=0
+        run: >
+          ctest --preset ${{ matrix.preset }}-test
+          -C ${{ matrix.config }} --output-junit build/test-results.xml --output-on-failure
+
+      - uses: ./.github/actions/install-consumer
+        with:
+          preset: ${{ matrix.preset }}
+          config: ${{ matrix.config }}
+
+      - uses: ./.github/actions/smoke
+        if: ${{ !endsWith(matrix.preset, '-asan') }}
+        with:
+          preset: ${{ matrix.preset }}
+          config: ${{ matrix.config }}
+
+      - name: upload test results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: test-results-${{ matrix.preset }}-${{ matrix.config }}
+          path: build/test-results.xml
+          if-no-files-found: warn
+
+  linux-gcc:
+    name: ${{ matrix.job_stem || matrix.preset }}-${{ matrix.config_name }}${{ matrix.sanitizer_suffix || '' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        preset:
+          - linux-gcc-12-x64
+          - linux-gcc-13-x64
+          - linux-gcc-14-x64
+          - linux-gcc-14-x64-asan
+          - linux-gcc-14-x64-tsan
+          - linux-gcc-14-x64-ubsan
+          - linux-gcc-14-x86
+        config: [Debug, Release]
+        include:
+          - config: Debug
+            config_name: dbg
+          - config: Release
+            config_name: rel
+          - preset: linux-gcc-12-x64
+            version: "12"
+          - preset: linux-gcc-13-x64
+            version: "13"
+          - preset: linux-gcc-14-x64
+            version: "14"
+          - preset: linux-gcc-14-x64-asan
+            job_stem: linux-gcc-14-x64
+            sanitizer_suffix: '-asan'
+            version: "14"
+          - preset: linux-gcc-14-x64-tsan
+            job_stem: linux-gcc-14-x64
+            sanitizer_suffix: '-tsan'
+            version: "14"
+          - preset: linux-gcc-14-x64-ubsan
+            job_stem: linux-gcc-14-x64
+            sanitizer_suffix: '-ubsan'
+            version: "14"
+          - preset: linux-gcc-14-x86
+            version: "14"
+            multilib: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          submodules: false
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-vcpkg
+        with:
+          vcpkg_commit: ${{ env.VCPKG_COMMIT }}
+          cache_key: ${{ matrix.preset }}
+
+      - uses: ./.github/actions/setup-gcc
+        with:
+          versions: "${{ matrix.version }}"
+          multilib: ${{ matrix.multilib || 'false' }}
+
+      - name: configure
+        run: >
+          cmake --preset ${{ matrix.preset }}
+          -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+          $HERMES_CONFIGURE_FLAGS
+
+      - name: build
+        run: cmake --build --preset ${{ matrix.preset }}-${{ matrix.config == 'Debug' && 'dbg' || 'rel' }}
+
+      - name: test
+        env:
+          ASAN_OPTIONS: detect_leaks=1
+          TSAN_OPTIONS: halt_on_error=1 second_deadlock_stack=1
+          UBSAN_OPTIONS: print_stacktrace=1 halt_on_error=1
+        run: >
+          ctest --preset ${{ matrix.preset }}-test
+          -C ${{ matrix.config }} --output-junit build/test-results.xml --output-on-failure
+
+      - uses: ./.github/actions/install-consumer
+        with:
+          preset: ${{ matrix.preset }}
+          config: ${{ matrix.config }}
+
+      - uses: ./.github/actions/smoke
+        if: ${{ !endsWith(matrix.preset, '-asan') && !endsWith(matrix.preset, '-tsan') && !endsWith(matrix.preset, '-ubsan') }}
+        with:
+          preset: ${{ matrix.preset }}
+          config: ${{ matrix.config }}
+
+      - name: upload test results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: test-results-${{ matrix.preset }}-${{ matrix.config }}
+          path: build/test-results.xml
+          if-no-files-found: warn
+
+  linux-clang:
+    name: ${{ matrix.job_stem || matrix.preset }}-${{ matrix.config_name }}${{ matrix.sanitizer_suffix || '' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        preset:
+          - linux-clang-17-x64
+          - linux-clang-18-x64
+          - linux-clang-19-x64
+          - linux-clang-19-x64-asan
+          - linux-clang-19-x64-tsan
+          - linux-clang-19-x64-ubsan
+          - linux-clang-19-x86
+        config: [Debug, Release]
+        include:
+          - config: Debug
+            config_name: dbg
+          - config: Release
+            config_name: rel
+          - preset: linux-clang-17-x64
+            version: "17"
+          - preset: linux-clang-18-x64
+            version: "18"
+          - preset: linux-clang-19-x64
+            version: "19"
+          - preset: linux-clang-19-x64-asan
+            job_stem: linux-clang-19-x64
+            sanitizer_suffix: '-asan'
+            version: "19"
+          - preset: linux-clang-19-x64-tsan
+            job_stem: linux-clang-19-x64
+            sanitizer_suffix: '-tsan'
+            version: "19"
+          - preset: linux-clang-19-x64-ubsan
+            job_stem: linux-clang-19-x64
+            sanitizer_suffix: '-ubsan'
+            version: "19"
+          - preset: linux-clang-19-x86
+            version: "19"
+            multilib: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          submodules: false
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-vcpkg
+        with:
+          vcpkg_commit: ${{ env.VCPKG_COMMIT }}
+          cache_key: ${{ matrix.preset }}
+
+      - uses: ./.github/actions/setup-clang
+        with:
+          versions: "${{ matrix.version }}"
+          multilib: ${{ matrix.multilib || 'false' }}
+
+      - name: configure
+        run: >
+          cmake --preset ${{ matrix.preset }}
+          -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+          $HERMES_CONFIGURE_FLAGS
+
+      - name: build
+        run: cmake --build --preset ${{ matrix.preset }}-${{ matrix.config == 'Debug' && 'dbg' || 'rel' }}
+
+      - name: test
+        env:
+          ASAN_OPTIONS: detect_leaks=1
+          TSAN_OPTIONS: halt_on_error=1 second_deadlock_stack=1
+          UBSAN_OPTIONS: print_stacktrace=1 halt_on_error=1
+        run: >
+          ctest --preset ${{ matrix.preset }}-test
+          -C ${{ matrix.config }} --output-junit build/test-results.xml --output-on-failure
+
+      - uses: ./.github/actions/install-consumer
+        with:
+          preset: ${{ matrix.preset }}
+          config: ${{ matrix.config }}
+
+      - uses: ./.github/actions/smoke
+        if: ${{ !endsWith(matrix.preset, '-asan') && !endsWith(matrix.preset, '-tsan') && !endsWith(matrix.preset, '-ubsan') }}
+        with:
+          preset: ${{ matrix.preset }}
+          config: ${{ matrix.config }}
+
+      - name: upload test results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: test-results-${{ matrix.preset }}-${{ matrix.config }}
+          path: build/test-results.xml
+          if-no-files-found: warn
+
+  clang-format:
+    name: clang-format
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          submodules: false
+          persist-credentials: false
+
+      - name: install clang-format
+        run: |
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc > /dev/null
+          echo "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-22 main" | sudo tee /etc/apt/sources.list.d/llvm22.list > /dev/null
+          sudo apt-get update
+          sudo apt-get install -y clang-format-22
+          clang-format-22 --version
+
+      - name: clang-format --dry-run --Werror
+        run: |
+          find include src tests examples benchmarks \
+            \( -name '*.cxx' -o -name '*.hxx' \) -print0 \
+            | xargs -0 -r clang-format-22 --dry-run --Werror --style=file
+
+  clang-tidy:
+    name: clang-tidy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          submodules: false
+          persist-credentials: false
+
+      - name: install clang-tidy
+        run: |
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc > /dev/null
+          echo "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-22 main" | sudo tee /etc/apt/sources.list.d/llvm22.list > /dev/null
+          sudo apt-get update
+          sudo apt-get install -y clang-22 clang-tidy-22 clang-tools-22 ninja-build gcc-14 g++-14
+          clang-tidy-22 --version
+
+      - uses: ./.github/actions/setup-vcpkg
+        with:
+          vcpkg_commit: ${{ env.VCPKG_COMMIT }}
+          cache_key: clang-tidy
+
+      - name: configure
+        run: >
+          cmake --preset linux-gcc-14-x64
+          -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+
+      - name: assert the compile database exists
+        run: test -s build/linux-gcc-14-x64/compile_commands.json
+
+      # report only: clang-tidy exits non-zero for a compiler error but not for a warning, so the
+      # findings go to the log and artifact without gating the build
+      - name: clang-tidy
+        run: |
+          set -o pipefail
+          run-clang-tidy-22 -p build/linux-gcc-14-x64 \
+            -clang-tidy-binary clang-tidy-22 \
+            -source-filter '/(src|tests|examples|benchmarks)/' \
+            -header-filter '.*/(include|src|tests|examples|benchmarks)/.*' \
+            2>&1 | tee build/clang-tidy.log
+
+      - name: upload the report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: clang-tidy-report
+          path: build/clang-tidy.log
+          if-no-files-found: warn

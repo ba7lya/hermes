@@ -1,0 +1,818 @@
+{
+  "version": 7,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 27,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "_base",
+      "hidden": true,
+      "generator": "Ninja Multi-Config",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_CONFIGURATION_TYPES": "Debug;Release",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": true,
+        "CMAKE_MAKE_PROGRAM": "ninja",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/thirdparty/vcpkg/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_INSTALLED_DIR": "${sourceDir}/build/${presetName}/vcpkg_installed",
+        "VCPKG_MANIFEST_FEATURES": "tests;benchmarks",
+        "ba7lya.hermes_BUILD_TEST": true,
+        "ba7lya.hermes_BUILD_BENCHMARK": true,
+        "ba7lya.hermes_BUILD_EXAMPLE": true
+      },
+      "warnings": {
+        "dev": false,
+        "systemVars": true,
+        "uninitialized": true,
+        "unusedCli": true,
+        "deprecated": true
+      },
+      "errors": {
+        "dev": false,
+        "deprecated": true
+      }
+    },
+    {
+      "name": "_linux",
+      "hidden": true,
+      "inherits": "_base",
+      "cacheVariables": {
+        "VCPKG_HOST_TRIPLET": "x64-linux",
+        "VCPKG_TARGET_TRIPLET": "x64-linux"
+      }
+    },
+    {
+      "name": "_linux_x86",
+      "hidden": true,
+      "inherits": "_base",
+      "cacheVariables": {
+        "CMAKE_C_FLAGS": "-m32",
+        "CMAKE_CXX_FLAGS": "-m32",
+        "CMAKE_EXE_LINKER_FLAGS": "-m32",
+        "CMAKE_SHARED_LINKER_FLAGS": "-m32",
+        "VCPKG_HOST_TRIPLET": "x64-linux",
+        "VCPKG_TARGET_TRIPLET": "x86-linux"
+      }
+    },
+    {
+      "name": "_win",
+      "hidden": true,
+      "inherits": "_base",
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
+      },
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "cl.exe",
+        "VCPKG_HOST_TRIPLET": "x64-windows",
+        "VCPKG_TARGET_TRIPLET": "x64-windows"
+      }
+    },
+    {
+      "name": "_win_x86",
+      "hidden": true,
+      "inherits": "_base",
+      "architecture": {
+        "value": "x86",
+        "strategy": "external"
+      },
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "cl.exe",
+        "VCPKG_HOST_TRIPLET": "x64-windows",
+        "VCPKG_TARGET_TRIPLET": "x86-windows"
+      }
+    },
+    {
+      "name": "linux-clang-17-x64",
+      "inherits": "_linux",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "clang-17",
+        "CMAKE_CXX_COMPILER": "clang++-17"
+      }
+    },
+    {
+      "name": "linux-clang-17-x86",
+      "inherits": "_linux_x86",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "clang-17",
+        "CMAKE_CXX_COMPILER": "clang++-17"
+      }
+    },
+    {
+      "name": "linux-clang-18-x64",
+      "inherits": "_linux",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "clang-18",
+        "CMAKE_CXX_COMPILER": "clang++-18"
+      }
+    },
+    {
+      "name": "linux-clang-18-x86",
+      "inherits": "_linux_x86",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "clang-18",
+        "CMAKE_CXX_COMPILER": "clang++-18"
+      }
+    },
+    {
+      "name": "linux-clang-19-x64",
+      "inherits": "_linux",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "clang-19",
+        "CMAKE_CXX_COMPILER": "clang++-19"
+      }
+    },
+    {
+      "name": "linux-clang-19-x64-asan",
+      "inherits": "linux-clang-19-x64",
+      "cacheVariables": {
+        "ba7lya.hermes_SANITIZER": "address"
+      }
+    },
+    {
+      "name": "linux-clang-19-x64-tsan",
+      "inherits": "linux-clang-19-x64",
+      "cacheVariables": {
+        "ba7lya.hermes_SANITIZER": "thread"
+      }
+    },
+    {
+      "name": "linux-clang-19-x64-ubsan",
+      "inherits": "linux-clang-19-x64",
+      "cacheVariables": {
+        "ba7lya.hermes_SANITIZER": "undefined"
+      }
+    },
+    {
+      "name": "linux-clang-19-x86",
+      "inherits": "_linux_x86",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "clang-19",
+        "CMAKE_CXX_COMPILER": "clang++-19"
+      }
+    },
+    {
+      "name": "linux-clang-19-x86-asan",
+      "inherits": "linux-clang-19-x86",
+      "cacheVariables": {
+        "ba7lya.hermes_SANITIZER": "address"
+      }
+    },
+    {
+      "name": "linux-clang-19-x86-ubsan",
+      "inherits": "linux-clang-19-x86",
+      "cacheVariables": {
+        "ba7lya.hermes_SANITIZER": "undefined"
+      }
+    },
+    {
+      "name": "linux-gcc-12-x64",
+      "inherits": "_linux",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "gcc-12",
+        "CMAKE_CXX_COMPILER": "g++-12"
+      }
+    },
+    {
+      "name": "linux-gcc-12-x86",
+      "inherits": "_linux_x86",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "gcc-12",
+        "CMAKE_CXX_COMPILER": "g++-12"
+      }
+    },
+    {
+      "name": "linux-gcc-13-x64",
+      "inherits": "_linux",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "gcc-13",
+        "CMAKE_CXX_COMPILER": "g++-13"
+      }
+    },
+    {
+      "name": "linux-gcc-13-x86",
+      "inherits": "_linux_x86",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "gcc-13",
+        "CMAKE_CXX_COMPILER": "g++-13"
+      }
+    },
+    {
+      "name": "linux-gcc-14-x64",
+      "inherits": "_linux",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "gcc-14",
+        "CMAKE_CXX_COMPILER": "g++-14"
+      }
+    },
+    {
+      "name": "linux-gcc-14-x64-asan",
+      "inherits": "linux-gcc-14-x64",
+      "cacheVariables": {
+        "ba7lya.hermes_SANITIZER": "address"
+      }
+    },
+    {
+      "name": "linux-gcc-14-x64-tsan",
+      "inherits": "linux-gcc-14-x64",
+      "cacheVariables": {
+        "ba7lya.hermes_SANITIZER": "thread"
+      }
+    },
+    {
+      "name": "linux-gcc-14-x64-ubsan",
+      "inherits": "linux-gcc-14-x64",
+      "cacheVariables": {
+        "ba7lya.hermes_SANITIZER": "undefined"
+      }
+    },
+    {
+      "name": "linux-gcc-14-x86",
+      "inherits": "_linux_x86",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "gcc-14",
+        "CMAKE_CXX_COMPILER": "g++-14"
+      }
+    },
+    {
+      "name": "linux-gcc-14-x86-asan",
+      "inherits": "linux-gcc-14-x86",
+      "cacheVariables": {
+        "ba7lya.hermes_SANITIZER": "address"
+      }
+    },
+    {
+      "name": "linux-gcc-14-x86-ubsan",
+      "inherits": "linux-gcc-14-x86",
+      "cacheVariables": {
+        "ba7lya.hermes_SANITIZER": "undefined"
+      }
+    },
+    {
+      "name": "win-msvc-2022-x64",
+      "inherits": "_win",
+      "toolset": {
+        "value": "v143,host=x64",
+        "strategy": "external"
+      }
+    },
+    {
+      "name": "win-msvc-2022-x64-asan",
+      "inherits": "win-msvc-2022-x64",
+      "cacheVariables": {
+        "ba7lya.hermes_SANITIZER": "address"
+      }
+    },
+    {
+      "name": "win-msvc-2022-x86",
+      "inherits": "_win_x86",
+      "toolset": {
+        "value": "v143,host=x64",
+        "strategy": "external"
+      }
+    },
+    {
+      "name": "win-msvc-2026-x64",
+      "inherits": "_win",
+      "toolset": {
+        "value": "v145,host=x64",
+        "strategy": "external"
+      }
+    },
+    {
+      "name": "win-msvc-2026-x64-asan",
+      "inherits": "win-msvc-2026-x64",
+      "cacheVariables": {
+        "ba7lya.hermes_SANITIZER": "address"
+      }
+    },
+    {
+      "name": "win-msvc-2026-x86",
+      "inherits": "_win_x86",
+      "toolset": {
+        "value": "v145,host=x64",
+        "strategy": "external"
+      }
+    },
+    {
+      "name": "win-msvc-2026-x86-asan",
+      "inherits": "win-msvc-2026-x86",
+      "cacheVariables": {
+        "ba7lya.hermes_SANITIZER": "address"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "_build-dbg",
+      "hidden": true,
+      "configuration": "Debug",
+      "cleanFirst": false,
+      "jobs": 8
+    },
+    {
+      "name": "_build-rel",
+      "hidden": true,
+      "configuration": "Release",
+      "cleanFirst": false,
+      "jobs": 8
+    },
+    {
+      "name": "linux-clang-17-x64-dbg",
+      "inherits": "_build-dbg",
+      "configurePreset": "linux-clang-17-x64"
+    },
+    {
+      "name": "linux-clang-17-x64-rel",
+      "inherits": "_build-rel",
+      "configurePreset": "linux-clang-17-x64"
+    },
+    {
+      "name": "linux-clang-17-x86-dbg",
+      "inherits": "_build-dbg",
+      "configurePreset": "linux-clang-17-x86"
+    },
+    {
+      "name": "linux-clang-17-x86-rel",
+      "inherits": "_build-rel",
+      "configurePreset": "linux-clang-17-x86"
+    },
+    {
+      "name": "linux-clang-18-x64-dbg",
+      "inherits": "_build-dbg",
+      "configurePreset": "linux-clang-18-x64"
+    },
+    {
+      "name": "linux-clang-18-x64-rel",
+      "inherits": "_build-rel",
+      "configurePreset": "linux-clang-18-x64"
+    },
+    {
+      "name": "linux-clang-18-x86-dbg",
+      "inherits": "_build-dbg",
+      "configurePreset": "linux-clang-18-x86"
+    },
+    {
+      "name": "linux-clang-18-x86-rel",
+      "inherits": "_build-rel",
+      "configurePreset": "linux-clang-18-x86"
+    },
+    {
+      "name": "linux-clang-19-x64-asan-dbg",
+      "inherits": "_build-dbg",
+      "configurePreset": "linux-clang-19-x64-asan"
+    },
+    {
+      "name": "linux-clang-19-x64-asan-rel",
+      "inherits": "_build-rel",
+      "configurePreset": "linux-clang-19-x64-asan"
+    },
+    {
+      "name": "linux-clang-19-x64-dbg",
+      "inherits": "_build-dbg",
+      "configurePreset": "linux-clang-19-x64"
+    },
+    {
+      "name": "linux-clang-19-x64-rel",
+      "inherits": "_build-rel",
+      "configurePreset": "linux-clang-19-x64"
+    },
+    {
+      "name": "linux-clang-19-x64-tsan-dbg",
+      "inherits": "_build-dbg",
+      "configurePreset": "linux-clang-19-x64-tsan"
+    },
+    {
+      "name": "linux-clang-19-x64-tsan-rel",
+      "inherits": "_build-rel",
+      "configurePreset": "linux-clang-19-x64-tsan"
+    },
+    {
+      "name": "linux-clang-19-x64-ubsan-dbg",
+      "inherits": "_build-dbg",
+      "configurePreset": "linux-clang-19-x64-ubsan"
+    },
+    {
+      "name": "linux-clang-19-x64-ubsan-rel",
+      "inherits": "_build-rel",
+      "configurePreset": "linux-clang-19-x64-ubsan"
+    },
+    {
+      "name": "linux-clang-19-x86-asan-dbg",
+      "inherits": "_build-dbg",
+      "configurePreset": "linux-clang-19-x86-asan"
+    },
+    {
+      "name": "linux-clang-19-x86-asan-rel",
+      "inherits": "_build-rel",
+      "configurePreset": "linux-clang-19-x86-asan"
+    },
+    {
+      "name": "linux-clang-19-x86-dbg",
+      "inherits": "_build-dbg",
+      "configurePreset": "linux-clang-19-x86"
+    },
+    {
+      "name": "linux-clang-19-x86-rel",
+      "inherits": "_build-rel",
+      "configurePreset": "linux-clang-19-x86"
+    },
+    {
+      "name": "linux-clang-19-x86-ubsan-dbg",
+      "inherits": "_build-dbg",
+      "configurePreset": "linux-clang-19-x86-ubsan"
+    },
+    {
+      "name": "linux-clang-19-x86-ubsan-rel",
+      "inherits": "_build-rel",
+      "configurePreset": "linux-clang-19-x86-ubsan"
+    },
+    {
+      "name": "linux-gcc-12-x64-dbg",
+      "inherits": "_build-dbg",
+      "configurePreset": "linux-gcc-12-x64"
+    },
+    {
+      "name": "linux-gcc-12-x64-rel",
+      "inherits": "_build-rel",
+      "configurePreset": "linux-gcc-12-x64"
+    },
+    {
+      "name": "linux-gcc-12-x86-dbg",
+      "inherits": "_build-dbg",
+      "configurePreset": "linux-gcc-12-x86"
+    },
+    {
+      "name": "linux-gcc-12-x86-rel",
+      "inherits": "_build-rel",
+      "configurePreset": "linux-gcc-12-x86"
+    },
+    {
+      "name": "linux-gcc-13-x64-dbg",
+      "inherits": "_build-dbg",
+      "configurePreset": "linux-gcc-13-x64"
+    },
+    {
+      "name": "linux-gcc-13-x64-rel",
+      "inherits": "_build-rel",
+      "configurePreset": "linux-gcc-13-x64"
+    },
+    {
+      "name": "linux-gcc-13-x86-dbg",
+      "inherits": "_build-dbg",
+      "configurePreset": "linux-gcc-13-x86"
+    },
+    {
+      "name": "linux-gcc-13-x86-rel",
+      "inherits": "_build-rel",
+      "configurePreset": "linux-gcc-13-x86"
+    },
+    {
+      "name": "linux-gcc-14-x64-asan-dbg",
+      "inherits": "_build-dbg",
+      "configurePreset": "linux-gcc-14-x64-asan"
+    },
+    {
+      "name": "linux-gcc-14-x64-asan-rel",
+      "inherits": "_build-rel",
+      "configurePreset": "linux-gcc-14-x64-asan"
+    },
+    {
+      "name": "linux-gcc-14-x64-dbg",
+      "inherits": "_build-dbg",
+      "configurePreset": "linux-gcc-14-x64"
+    },
+    {
+      "name": "linux-gcc-14-x64-rel",
+      "inherits": "_build-rel",
+      "configurePreset": "linux-gcc-14-x64"
+    },
+    {
+      "name": "linux-gcc-14-x64-tsan-dbg",
+      "inherits": "_build-dbg",
+      "configurePreset": "linux-gcc-14-x64-tsan"
+    },
+    {
+      "name": "linux-gcc-14-x64-tsan-rel",
+      "inherits": "_build-rel",
+      "configurePreset": "linux-gcc-14-x64-tsan"
+    },
+    {
+      "name": "linux-gcc-14-x64-ubsan-dbg",
+      "inherits": "_build-dbg",
+      "configurePreset": "linux-gcc-14-x64-ubsan"
+    },
+    {
+      "name": "linux-gcc-14-x64-ubsan-rel",
+      "inherits": "_build-rel",
+      "configurePreset": "linux-gcc-14-x64-ubsan"
+    },
+    {
+      "name": "linux-gcc-14-x86-asan-dbg",
+      "inherits": "_build-dbg",
+      "configurePreset": "linux-gcc-14-x86-asan"
+    },
+    {
+      "name": "linux-gcc-14-x86-asan-rel",
+      "inherits": "_build-rel",
+      "configurePreset": "linux-gcc-14-x86-asan"
+    },
+    {
+      "name": "linux-gcc-14-x86-dbg",
+      "inherits": "_build-dbg",
+      "configurePreset": "linux-gcc-14-x86"
+    },
+    {
+      "name": "linux-gcc-14-x86-rel",
+      "inherits": "_build-rel",
+      "configurePreset": "linux-gcc-14-x86"
+    },
+    {
+      "name": "linux-gcc-14-x86-ubsan-dbg",
+      "inherits": "_build-dbg",
+      "configurePreset": "linux-gcc-14-x86-ubsan"
+    },
+    {
+      "name": "linux-gcc-14-x86-ubsan-rel",
+      "inherits": "_build-rel",
+      "configurePreset": "linux-gcc-14-x86-ubsan"
+    },
+    {
+      "name": "win-msvc-2022-x64-asan-dbg",
+      "inherits": "_build-dbg",
+      "configurePreset": "win-msvc-2022-x64-asan"
+    },
+    {
+      "name": "win-msvc-2022-x64-asan-rel",
+      "inherits": "_build-rel",
+      "configurePreset": "win-msvc-2022-x64-asan"
+    },
+    {
+      "name": "win-msvc-2022-x64-dbg",
+      "inherits": "_build-dbg",
+      "configurePreset": "win-msvc-2022-x64"
+    },
+    {
+      "name": "win-msvc-2022-x64-rel",
+      "inherits": "_build-rel",
+      "configurePreset": "win-msvc-2022-x64"
+    },
+    {
+      "name": "win-msvc-2022-x86-dbg",
+      "inherits": "_build-dbg",
+      "configurePreset": "win-msvc-2022-x86"
+    },
+    {
+      "name": "win-msvc-2022-x86-rel",
+      "inherits": "_build-rel",
+      "configurePreset": "win-msvc-2022-x86"
+    },
+    {
+      "name": "win-msvc-2026-x64-asan-dbg",
+      "inherits": "_build-dbg",
+      "configurePreset": "win-msvc-2026-x64-asan"
+    },
+    {
+      "name": "win-msvc-2026-x64-asan-rel",
+      "inherits": "_build-rel",
+      "configurePreset": "win-msvc-2026-x64-asan"
+    },
+    {
+      "name": "win-msvc-2026-x64-dbg",
+      "inherits": "_build-dbg",
+      "configurePreset": "win-msvc-2026-x64"
+    },
+    {
+      "name": "win-msvc-2026-x64-rel",
+      "inherits": "_build-rel",
+      "configurePreset": "win-msvc-2026-x64"
+    },
+    {
+      "name": "win-msvc-2026-x86-asan-dbg",
+      "inherits": "_build-dbg",
+      "configurePreset": "win-msvc-2026-x86-asan"
+    },
+    {
+      "name": "win-msvc-2026-x86-asan-rel",
+      "inherits": "_build-rel",
+      "configurePreset": "win-msvc-2026-x86-asan"
+    },
+    {
+      "name": "win-msvc-2026-x86-dbg",
+      "inherits": "_build-dbg",
+      "configurePreset": "win-msvc-2026-x86"
+    },
+    {
+      "name": "win-msvc-2026-x86-rel",
+      "inherits": "_build-rel",
+      "configurePreset": "win-msvc-2026-x86"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "linux-clang-17-x64-test",
+      "configurePreset": "linux-clang-17-x64",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "linux-clang-17-x86-test",
+      "configurePreset": "linux-clang-17-x86",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "linux-clang-18-x64-test",
+      "configurePreset": "linux-clang-18-x64",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "linux-clang-18-x86-test",
+      "configurePreset": "linux-clang-18-x86",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "linux-clang-19-x64-asan-test",
+      "configurePreset": "linux-clang-19-x64-asan",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "linux-clang-19-x64-test",
+      "configurePreset": "linux-clang-19-x64",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "linux-clang-19-x64-tsan-test",
+      "configurePreset": "linux-clang-19-x64-tsan",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "linux-clang-19-x64-ubsan-test",
+      "configurePreset": "linux-clang-19-x64-ubsan",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "linux-clang-19-x86-asan-test",
+      "configurePreset": "linux-clang-19-x86-asan",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "linux-clang-19-x86-test",
+      "configurePreset": "linux-clang-19-x86",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "linux-clang-19-x86-ubsan-test",
+      "configurePreset": "linux-clang-19-x86-ubsan",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "linux-gcc-12-x64-test",
+      "configurePreset": "linux-gcc-12-x64",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "linux-gcc-12-x86-test",
+      "configurePreset": "linux-gcc-12-x86",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "linux-gcc-13-x64-test",
+      "configurePreset": "linux-gcc-13-x64",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "linux-gcc-13-x86-test",
+      "configurePreset": "linux-gcc-13-x86",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "linux-gcc-14-x64-asan-test",
+      "configurePreset": "linux-gcc-14-x64-asan",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "linux-gcc-14-x64-test",
+      "configurePreset": "linux-gcc-14-x64",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "linux-gcc-14-x64-tsan-test",
+      "configurePreset": "linux-gcc-14-x64-tsan",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "linux-gcc-14-x64-ubsan-test",
+      "configurePreset": "linux-gcc-14-x64-ubsan",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "linux-gcc-14-x86-asan-test",
+      "configurePreset": "linux-gcc-14-x86-asan",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "linux-gcc-14-x86-test",
+      "configurePreset": "linux-gcc-14-x86",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "linux-gcc-14-x86-ubsan-test",
+      "configurePreset": "linux-gcc-14-x86-ubsan",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "win-msvc-2022-x64-asan-test",
+      "configurePreset": "win-msvc-2022-x64-asan",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "win-msvc-2022-x64-test",
+      "configurePreset": "win-msvc-2022-x64",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "win-msvc-2022-x86-test",
+      "configurePreset": "win-msvc-2022-x86",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "win-msvc-2026-x64-asan-test",
+      "configurePreset": "win-msvc-2026-x64-asan",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "win-msvc-2026-x64-test",
+      "configurePreset": "win-msvc-2026-x64",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "win-msvc-2026-x86-asan-test",
+      "configurePreset": "win-msvc-2026-x86-asan",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "win-msvc-2026-x86-test",
+      "configurePreset": "win-msvc-2026-x86",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}

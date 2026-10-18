@@ -1,0 +1,27 @@
+{
+  "name": "hermes",
+  "version-semver": "1.0.0",
+  "description": "Vendor independent Hermes Standard implementation for SMT assembly equipment",
+  "homepage": "https://github.com/ba7lya/hermes",
+  "license": "MIT",
+  "builtin-baseline": "bf19794383e8fb95eba5aa553235bc8ec2271688",
+  "dependencies": [
+    "asio",
+    "pugixml"
+  ],
+  "features": {
+    "tests": {
+      "description": "GoogleTest, used by the unit, integration and end-to-end test suites",
+      "dependencies": [
+        "gtest"
+      ]
+    },
+    "benchmarks": {
+      "description": "Google Benchmark, used by the benchmark target",
+      "dependencies": [
+        "benchmark"
+      ]
+    }
+  },
+  "overrides": []
+}

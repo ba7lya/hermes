@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: MIT
+#
+# Installs the GCC majors the Linux presets name. The PPA is the same source for every version,
+# so the package list is built from one input instead of repeating apt lines per job.
+name: setup gcc
+description: Install the requested GCC majors and Ninja on Ubuntu.
+
+inputs:
+  versions:
+    description: Space-separated GCC major versions, for example "12 13 14".
+    required: false
+    default: '14'
+  multilib:
+    description: Also install 32-bit support for the x86 presets.
+    required: false
+    default: 'false'
+
+runs:
+  using: composite
+  steps:
+    - name: install gcc
+      shell: bash
+      run: |
+        sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
+        sudo apt-get update
+        packages=()
+        for version in ${{ inputs.versions }}; do
+          packages+=("gcc-${version}" "g++-${version}")
+        done
+        if [ "${{ inputs.multilib }}" = "true" ]; then
+          for version in ${{ inputs.versions }}; do
+            packages+=("gcc-${version}-multilib" "g++-${version}-multilib")
+          done
+          packages+=("libc6-dev-i386" "lib32asan8" "lib32ubsan1")
+        fi
+        sudo apt-get install -y "${packages[@]}" ninja-build
+        set -- ${{ inputs.versions }}
+        echo "CC=gcc-$1" >> "$GITHUB_ENV"
+        echo "CXX=g++-$1" >> "$GITHUB_ENV"

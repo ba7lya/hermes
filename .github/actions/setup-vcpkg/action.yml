@@ -1,0 +1,119 @@
+# SPDX-License-Identifier: MIT
+#
+# Installs vcpkg for a job. With vcpkg_commit set it clones the pinned revision used by CI; with
+# an empty commit it checks out the current default branch and optionally points the manifest at
+# that HEAD, which is what the nightly canary needs.
+name: setup vcpkg
+description: Install vcpkg at a pinned revision or at the current default branch.
+
+inputs:
+  vcpkg_commit:
+    description: Commit of microsoft/vcpkg to clone; empty means the current default branch.
+    required: false
+    default: ''
+  update_baseline:
+    description: Rewrite vcpkg.json builtin-baseline to the checked-out vcpkg HEAD.
+    required: false
+    default: 'false'
+  cache_key:
+    description: Stable key fragment for the binary cache, usually the configure preset.
+    required: false
+    default: default
+
+runs:
+  using: composite
+  steps:
+    - name: verify the pinned baseline (windows)
+      if: ${{ inputs.vcpkg_commit != '' && runner.os == 'Windows' }}
+      shell: pwsh
+      run: |
+        $baseline = (Get-Content vcpkg.json -Raw | ConvertFrom-Json).'builtin-baseline'
+        if ($baseline -ne "${{ inputs.vcpkg_commit }}") {
+          throw "vcpkg.json baseline $baseline does not match VCPKG_COMMIT"
+        }
+
+    - name: verify the pinned baseline (unix)
+      if: ${{ inputs.vcpkg_commit != '' && runner.os != 'Windows' }}
+      shell: bash
+      run: |
+        baseline=$(python3 -c "import json; print(json.load(open('vcpkg.json'))['builtin-baseline'])")
+        test "$baseline" = "${{ inputs.vcpkg_commit }}"
+
+    - name: clone the pinned vcpkg revision
+      if: ${{ inputs.vcpkg_commit != '' }}
+      uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2 # v11.6
+      with:
+        vcpkgGitCommitId: ${{ inputs.vcpkg_commit }}
+
+    - name: export the pinned vcpkg root
+      if: ${{ inputs.vcpkg_commit != '' }}
+      shell: bash
+      run: echo "VCPKG_ROOT=$RUNVCPKG_VCPKG_ROOT" >> "$GITHUB_ENV"
+
+    - name: check out the vcpkg default branch
+      if: ${{ inputs.vcpkg_commit == '' }}
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      with:
+        repository: microsoft/vcpkg
+        path: vcpkg
+        fetch-depth: 1
+        submodules: false
+        persist-credentials: false
+
+    - name: cache vcpkg binaries
+      uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+      with:
+        path: build/.vcpkg-cache
+        key: vcpkg-${{ runner.os }}-${{ inputs.cache_key }}-${{ hashFiles('vcpkg.json') }}
+        restore-keys: |
+          vcpkg-${{ runner.os }}-${{ inputs.cache_key }}-
+
+    - name: point vcpkg at the binary cache
+      shell: bash
+      run: |
+        mkdir -p "${{ github.workspace }}/build/.vcpkg-cache"
+        echo "VCPKG_DEFAULT_BINARY_CACHE=${{ github.workspace }}/build/.vcpkg-cache" >> "$GITHUB_ENV"
+
+    - name: bootstrap vcpkg (windows)
+      if: ${{ inputs.vcpkg_commit == '' && runner.os == 'Windows' }}
+      shell: pwsh
+      run: |
+        ./vcpkg/bootstrap-vcpkg.bat -disableMetrics
+        $root = (Resolve-Path ./vcpkg).Path -replace '\\','/'
+        "VCPKG_ROOT=$root" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+    - name: bootstrap vcpkg (unix)
+      if: ${{ inputs.vcpkg_commit == '' && runner.os != 'Windows' }}
+      shell: bash
+      run: |
+        ./vcpkg/bootstrap-vcpkg.sh -disableMetrics
+        echo "VCPKG_ROOT=${{ github.workspace }}/vcpkg" >> "$GITHUB_ENV"
+
+    - name: point the manifest at vcpkg HEAD (windows)
+      if: ${{ inputs.update_baseline == 'true' && runner.os == 'Windows' }}
+      shell: pwsh
+      run: |
+        $baseline = (git -C vcpkg rev-parse HEAD).Trim()
+        $manifest = Get-Content vcpkg.json -Raw | ConvertFrom-Json
+        $manifest.'builtin-baseline' = $baseline
+        $manifest | ConvertTo-Json -Depth 10 | Set-Content vcpkg.json -Encoding utf8
+        "VCPKG_BASELINE=$baseline" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+    - name: point the manifest at vcpkg HEAD (unix)
+      if: ${{ inputs.update_baseline == 'true' && runner.os != 'Windows' }}
+      shell: bash
+      run: |
+        vcpkg_root="${VCPKG_ROOT:-${{ github.workspace }}/vcpkg}"
+        baseline=$(git -C "$vcpkg_root" rev-parse HEAD)
+        echo "vcpkg baseline: $baseline"
+        VCPKG_BASELINE="$baseline" python3 - <<'PY'
+        import json
+        import os
+        import pathlib
+
+        path = pathlib.Path("vcpkg.json")
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        manifest["builtin-baseline"] = os.environ["VCPKG_BASELINE"]
+        path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+        PY
+        echo "VCPKG_BASELINE=$baseline" >> "$GITHUB_ENV"

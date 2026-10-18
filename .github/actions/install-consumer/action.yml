@@ -1,0 +1,96 @@
+# SPDX-License-Identifier: MIT
+#
+# Installs the just-built library into a staging prefix and builds the downstream consumer
+# against it. This is the install/export smoke test; it must not use the source tree.
+name: install consumer
+description: Install the library and build the installed-tree consumer.
+
+inputs:
+  preset:
+    description: Configure preset that produced the build.
+    required: true
+  config:
+    description: Configuration to install and build.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: install and build the consumer
+      shell: bash
+      run: |
+        flags=()
+        cxx_flags=""
+        exe_flags=""
+        shared_flags=""
+
+        if [ "$RUNNER_OS" = "Linux" ]; then
+          case "${{ inputs.preset }}" in
+            *-x86*)
+              cxx_flags="-m32"
+              exe_flags="-m32"
+              shared_flags="-m32"
+              ;;
+          esac
+        fi
+
+        sanitizer=""
+        case "${{ inputs.preset }}" in
+          *-asan) sanitizer="address" ;;
+          *-tsan) sanitizer="thread" ;;
+          *-ubsan) sanitizer="undefined" ;;
+        esac
+        if [ -n "$sanitizer" ]; then
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            cxx_flags="-fsanitize=address"
+            exe_flags="-fsanitize=address"
+          else
+            cxx_flags="$cxx_flags -fsanitize=$sanitizer"
+            exe_flags="$exe_flags -fsanitize=$sanitizer"
+            shared_flags="$shared_flags -fsanitize=$sanitizer"
+          fi
+        fi
+
+        if [ -n "$cxx_flags" ]; then flags+=("-DCMAKE_CXX_FLAGS=$cxx_flags"); fi
+        if [ -n "$exe_flags" ]; then flags+=("-DCMAKE_EXE_LINKER_FLAGS=$exe_flags"); fi
+        if [ -n "$shared_flags" ]; then flags+=("-DCMAKE_SHARED_LINKER_FLAGS=$shared_flags"); fi
+
+        case "${{ inputs.preset }}" in
+          *-x86*)
+            if [ "$RUNNER_OS" = "Windows" ]; then
+              target_triplet="x86-windows"
+              host_triplet="x64-windows"
+            else
+              target_triplet="x86-linux"
+              host_triplet="x64-linux"
+            fi
+            ;;
+          *)
+            if [ "$RUNNER_OS" = "Windows" ]; then
+              target_triplet="x64-windows"
+              host_triplet="x64-windows"
+            else
+              target_triplet="x64-linux"
+              host_triplet="x64-linux"
+            fi
+            ;;
+        esac
+        flags+=("-DVCPKG_TARGET_TRIPLET=$target_triplet" "-DVCPKG_HOST_TRIPLET=$host_triplet")
+
+        cmake --install "build/${{ inputs.preset }}" --config "${{ inputs.config }}" --prefix "$PWD/build/install"
+        cmake -S tests/install -B build/consumer -G "Ninja Multi-Config" \
+          -DCMAKE_PREFIX_PATH="$PWD/build/install" \
+          -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
+          -DVCPKG_INSTALLED_DIR="$PWD/build/${{ inputs.preset }}/vcpkg_installed" \
+          -DVCPKG_MANIFEST_MODE=OFF -DCMAKE_CONFIGURATION_TYPES="${{ inputs.config }}" \
+          "${flags[@]}"
+        cmake --build build/consumer --config "${{ inputs.config }}"
+
+    - name: run the consumer
+      shell: bash
+      run: |
+        suffix=""
+        if [ "$RUNNER_OS" = "Windows" ]; then
+          suffix=".exe"
+        fi
+        "./build/consumer/${{ inputs.config }}/hermes_install_consumer${suffix}"

@@ -1,0 +1,424 @@
+# SPDX-License-Identifier: MIT
+#
+# Nightly canary: the daily job checks one representative build per OS/compiler against the
+# current vcpkg default branch; the weekly job runs the complete supported matrix. The regular
+# CI stays reproducible on the pinned baseline.
+name: nightly
+
+on:
+  schedule:
+    # daily canary, off the hour
+    - cron: '23 4 * * *'
+    # weekly full matrix, also off the hour
+    - cron: '37 4 * * 0'
+  workflow_dispatch:
+    inputs:
+      full_matrix:
+        description: Run the complete supported matrix instead of the daily canary.
+        type: boolean
+        default: false
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  VCPKG_DISABLE_METRICS: 1
+  VCPKG_BINARY_SOURCES: clear;default,readwrite
+
+jobs:
+  canary:
+    name: canary-${{ matrix.job_stem || matrix.preset }}-${{ matrix.config_name }}${{ matrix.sanitizer_suffix || '' }}
+    if: ${{ (github.event_name == 'schedule' && github.event.schedule == '23 4 * * *') || (github.event_name == 'workflow_dispatch' && !inputs.full_matrix) }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix:
+        preset:
+          - linux-clang-19-x64
+          - linux-clang-19-x86
+          - linux-gcc-14-x64
+          - linux-gcc-14-x86
+          - win-msvc-2022-x64
+          - win-msvc-2026-x64
+        config: [Release]
+        include:
+          - config: Release
+            config_name: rel
+          - preset: linux-clang-19-x64
+            os: ubuntu-24.04
+            setup: clang
+            version: "19"
+          - preset: linux-clang-19-x86
+            os: ubuntu-24.04
+            setup: clang
+            version: "19"
+            multilib: true
+          - preset: linux-gcc-14-x64
+            os: ubuntu-24.04
+            setup: gcc
+            version: "14"
+          - preset: linux-gcc-14-x86
+            os: ubuntu-24.04
+            setup: gcc
+            version: "14"
+            multilib: true
+          - preset: win-msvc-2022-x64
+            os: windows-2022
+            setup: windows
+            arch: x64
+          - preset: win-msvc-2026-x64
+            os: windows-2025-vs2026
+            setup: windows
+            arch: x64
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          submodules: false
+          persist-credentials: false
+
+      - uses: rzlamrr/msvc-dev-cmd@70b9da25ce35e6470a3bd4be4b4a1a4929a61925 # v2
+        if: matrix.setup == 'windows'
+        with:
+          arch: ${{ matrix.arch }}
+
+      - uses: ./.github/actions/setup-vcpkg
+        with:
+          update_baseline: true
+          cache_key: ${{ matrix.preset }}
+
+      - uses: ./.github/actions/setup-gcc
+        if: matrix.setup == 'gcc'
+        with:
+          versions: ${{ matrix.version }}
+          multilib: ${{ matrix.multilib || 'false' }}
+
+      - uses: ./.github/actions/setup-clang
+        if: matrix.setup == 'clang'
+        with:
+          versions: ${{ matrix.version }}
+          multilib: ${{ matrix.multilib || 'false' }}
+
+      - name: configure (windows)
+        if: matrix.setup == 'windows'
+        shell: cmd
+        run: >
+          cmake --preset ${{ matrix.preset }}
+          -DCMAKE_TOOLCHAIN_FILE="%VCPKG_ROOT%/scripts/buildsystems/vcpkg.cmake"
+
+      - name: configure (linux)
+        if: matrix.setup != 'windows'
+        run: >
+          cmake --preset ${{ matrix.preset }}
+          -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+
+      - name: build
+        run: cmake --build --preset ${{ matrix.preset }}-${{ matrix.config == 'Debug' && 'dbg' || 'rel' }}
+
+      - name: test
+        env:
+          ASAN_OPTIONS: ${{ startsWith(matrix.os, 'windows') && 'detect_leaks=0' || 'detect_leaks=1' }}
+          TSAN_OPTIONS: halt_on_error=1 second_deadlock_stack=1
+          UBSAN_OPTIONS: print_stacktrace=1 halt_on_error=1
+        run: >
+          ctest --preset ${{ matrix.preset }}-test
+          -C ${{ matrix.config }} --output-on-failure
+
+  full:
+    name: full-${{ matrix.job_stem || matrix.preset }}-${{ matrix.config_name }}${{ matrix.sanitizer_suffix || '' }}
+    if: ${{ (github.event_name == 'schedule' && github.event.schedule == '37 4 * * 0') || (github.event_name == 'workflow_dispatch' && inputs.full_matrix) }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix:
+        preset:
+          - linux-clang-17-x64
+          - linux-clang-17-x86
+          - linux-clang-18-x64
+          - linux-clang-18-x86
+          - linux-clang-19-x64
+          - linux-clang-19-x64-asan
+          - linux-clang-19-x64-tsan
+          - linux-clang-19-x64-ubsan
+          - linux-clang-19-x86
+          - linux-clang-19-x86-asan
+          - linux-clang-19-x86-ubsan
+          - linux-gcc-12-x64
+          - linux-gcc-12-x86
+          - linux-gcc-13-x64
+          - linux-gcc-13-x86
+          - linux-gcc-14-x64
+          - linux-gcc-14-x64-asan
+          - linux-gcc-14-x64-tsan
+          - linux-gcc-14-x64-ubsan
+          - linux-gcc-14-x86
+          - linux-gcc-14-x86-asan
+          - linux-gcc-14-x86-ubsan
+          - win-msvc-2022-x64
+          - win-msvc-2022-x64-asan
+          - win-msvc-2022-x86
+          - win-msvc-2026-x64
+          - win-msvc-2026-x64-asan
+          - win-msvc-2026-x86
+          - win-msvc-2026-x86-asan
+        config: [Debug, Release]
+        include:
+          - config: Debug
+            config_name: dbg
+          - config: Release
+            config_name: rel
+          - preset: linux-clang-17-x64
+            os: ubuntu-24.04
+            setup: clang
+            version: "17"
+          - preset: linux-clang-17-x86
+            os: ubuntu-24.04
+            setup: clang
+            version: "17"
+            multilib: true
+          - preset: linux-clang-18-x64
+            os: ubuntu-24.04
+            setup: clang
+            version: "18"
+          - preset: linux-clang-18-x86
+            os: ubuntu-24.04
+            setup: clang
+            version: "18"
+            multilib: true
+          - preset: linux-clang-19-x64
+            os: ubuntu-24.04
+            setup: clang
+            version: "19"
+          - preset: linux-clang-19-x64-asan
+            job_stem: linux-clang-19-x64
+            sanitizer_suffix: '-asan'
+            os: ubuntu-24.04
+            setup: clang
+            version: "19"
+          - preset: linux-clang-19-x64-tsan
+            job_stem: linux-clang-19-x64
+            sanitizer_suffix: '-tsan'
+            os: ubuntu-24.04
+            setup: clang
+            version: "19"
+          - preset: linux-clang-19-x64-ubsan
+            job_stem: linux-clang-19-x64
+            sanitizer_suffix: '-ubsan'
+            os: ubuntu-24.04
+            setup: clang
+            version: "19"
+          - preset: linux-clang-19-x86
+            os: ubuntu-24.04
+            setup: clang
+            version: "19"
+            multilib: true
+          - preset: linux-clang-19-x86-asan
+            job_stem: linux-clang-19-x86
+            sanitizer_suffix: '-asan'
+            os: ubuntu-24.04
+            setup: clang
+            version: "19"
+            multilib: true
+          - preset: linux-clang-19-x86-ubsan
+            job_stem: linux-clang-19-x86
+            sanitizer_suffix: '-ubsan'
+            os: ubuntu-24.04
+            setup: clang
+            version: "19"
+            multilib: true
+          - preset: linux-gcc-12-x64
+            os: ubuntu-24.04
+            setup: gcc
+            version: "12"
+          - preset: linux-gcc-12-x86
+            os: ubuntu-24.04
+            setup: gcc
+            version: "12"
+            multilib: true
+          - preset: linux-gcc-13-x64
+            os: ubuntu-24.04
+            setup: gcc
+            version: "13"
+          - preset: linux-gcc-13-x86
+            os: ubuntu-24.04
+            setup: gcc
+            version: "13"
+            multilib: true
+          - preset: linux-gcc-14-x64
+            os: ubuntu-24.04
+            setup: gcc
+            version: "14"
+          - preset: linux-gcc-14-x64-asan
+            job_stem: linux-gcc-14-x64
+            sanitizer_suffix: '-asan'
+            os: ubuntu-24.04
+            setup: gcc
+            version: "14"
+          - preset: linux-gcc-14-x64-tsan
+            job_stem: linux-gcc-14-x64
+            sanitizer_suffix: '-tsan'
+            os: ubuntu-24.04
+            setup: gcc
+            version: "14"
+          - preset: linux-gcc-14-x64-ubsan
+            job_stem: linux-gcc-14-x64
+            sanitizer_suffix: '-ubsan'
+            os: ubuntu-24.04
+            setup: gcc
+            version: "14"
+          - preset: linux-gcc-14-x86
+            os: ubuntu-24.04
+            setup: gcc
+            version: "14"
+            multilib: true
+          - preset: linux-gcc-14-x86-asan
+            job_stem: linux-gcc-14-x86
+            sanitizer_suffix: '-asan'
+            os: ubuntu-24.04
+            setup: gcc
+            version: "14"
+            multilib: true
+          - preset: linux-gcc-14-x86-ubsan
+            job_stem: linux-gcc-14-x86
+            sanitizer_suffix: '-ubsan'
+            os: ubuntu-24.04
+            setup: gcc
+            version: "14"
+            multilib: true
+          - preset: win-msvc-2022-x64
+            os: windows-2022
+            setup: windows
+            arch: x64
+          - preset: win-msvc-2022-x64-asan
+            job_stem: win-msvc-2022-x64
+            sanitizer_suffix: '-asan'
+            os: windows-2022
+            setup: windows
+            arch: x64
+          - preset: win-msvc-2022-x86
+            os: windows-2022
+            setup: windows
+            arch: x86
+          - preset: win-msvc-2026-x64
+            os: windows-2025-vs2026
+            setup: windows
+            arch: x64
+          - preset: win-msvc-2026-x64-asan
+            job_stem: win-msvc-2026-x64
+            sanitizer_suffix: '-asan'
+            os: windows-2025-vs2026
+            setup: windows
+            arch: x64
+          - preset: win-msvc-2026-x86
+            os: windows-2025-vs2026
+            setup: windows
+            arch: x86
+          - preset: win-msvc-2026-x86-asan
+            job_stem: win-msvc-2026-x86
+            sanitizer_suffix: '-asan'
+            os: windows-2025-vs2026
+            setup: windows
+            arch: x86
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          submodules: false
+          persist-credentials: false
+
+      - uses: rzlamrr/msvc-dev-cmd@70b9da25ce35e6470a3bd4be4b4a1a4929a61925 # v2
+        if: matrix.setup == 'windows'
+        with:
+          arch: ${{ matrix.arch }}
+
+      - uses: ./.github/actions/setup-vcpkg
+        with:
+          update_baseline: true
+          cache_key: ${{ matrix.preset }}
+
+      - uses: ./.github/actions/setup-gcc
+        if: matrix.setup == 'gcc'
+        with:
+          versions: ${{ matrix.version }}
+          multilib: ${{ matrix.multilib || 'false' }}
+
+      - uses: ./.github/actions/setup-clang
+        if: matrix.setup == 'clang'
+        with:
+          versions: ${{ matrix.version }}
+          multilib: ${{ matrix.multilib || 'false' }}
+
+      - name: configure (windows)
+        if: matrix.setup == 'windows'
+        shell: cmd
+        run: >
+          cmake --preset ${{ matrix.preset }}
+          -DCMAKE_TOOLCHAIN_FILE="%VCPKG_ROOT%/scripts/buildsystems/vcpkg.cmake"
+
+      - name: configure (linux)
+        if: matrix.setup != 'windows'
+        run: >
+          cmake --preset ${{ matrix.preset }}
+          -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+
+      - name: build
+        run: cmake --build --preset ${{ matrix.preset }}-${{ matrix.config == 'Debug' && 'dbg' || 'rel' }}
+
+      - name: test
+        env:
+          ASAN_OPTIONS: ${{ startsWith(matrix.os, 'windows') && 'detect_leaks=0' || 'detect_leaks=1' }}
+          TSAN_OPTIONS: halt_on_error=1 second_deadlock_stack=1
+          UBSAN_OPTIONS: print_stacktrace=1 halt_on_error=1
+        run: >
+          ctest --preset ${{ matrix.preset }}-test
+          -C ${{ matrix.config }} --output-on-failure
+
+  report:
+    name: report
+    needs: [canary, full]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: open, update or close the nightly issue
+        run: |
+          failed=false
+          if [ "${{ needs.canary.result }}" = "failure" ] || [ "${{ needs.full.result }}" = "failure" ]; then
+            failed=true
+          fi
+          existing=$(gh issue list --state open --limit 100 --json number,title \
+            --jq 'map(select(.title | startswith("[nightly]"))) | .[0].number // empty')
+          run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          if [ "$failed" = true ]; then
+            title="[nightly] vcpkg default branch build failed (run ${{ github.run_number }})"
+            body=$(cat <<EOF
+          The nightly canary against vcpkg's default branch failed.
+
+          Workflow run: $run_url
+          Commit: ${{ github.sha }}
+          EOF
+            )
+            if [ -n "$existing" ]; then
+              gh issue comment "$existing" --body "$body"
+            else
+              gh issue create --title "$title" --body "$body"
+            fi
+          elif [ -n "$existing" ]; then
+            gh issue close "$existing" --comment "Nightly canary is green again: $run_url"
+          fi

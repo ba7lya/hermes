@@ -1,0 +1,140 @@
+@startuml sessions
+' SPDX-License-Identifier: MIT
+'
+' Class diagram of the transport and the sessions hidden behind the facades.
+' Render with: plantuml uml/sessions.uml
+
+hide circle
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+
+title Hermes — transport and sessions (ba7lya::hermes::detail)
+
+package "transport" {
+    class io_runner {
+        -context_ : asio::io_context
+        -guard_ : optional<work_guard>
+        -thread_ : thread
+        +start()
+        +join()
+        +halt()
+        +retire()
+        +on_thread() : bool
+        +context() : asio::io_context&
+    }
+
+    class frame_extractor {
+        -buffer_ : string
+        +feed(bytes, documents, error_info) : bool
+        +buffered() : size_t
+    }
+
+    class connection {
+        -socket_ : asio::ip::tcp::socket
+        -extractor_ : frame_extractor
+        -queue_ : deque<string>
+        -writing_ : bool
+        -closed_ : bool
+        +start(frame_handler, close_handler)
+        +send(document)
+        +send_and_close(document, reason)
+        +close(reason)
+    }
+
+    class connector {
+        -host_ : string
+        -port_ : uint16
+        -retry_delay_ : milliseconds
+        +start(connect_handler, failure_handler)
+        +stop()
+    }
+
+    class acceptor {
+        -acceptor_ : asio::ip::tcp::acceptor
+        +listen() : expected<void, error_info>
+        +start(accept_handler, error_handler)
+        +stop()
+        +port() : uint16
+    }
+}
+
+package "sessions" {
+    class horizontal_session {
+        -role_ : horizontal_role
+        -state_ : atomic<channel_state>
+        -options_ : horizontal_options
+        -ping_timer_ : steady_timer
+        -pong_timer_ : steady_timer
+        +attach(connection)
+        +send(any_message) : expected<void, error_info>
+        +send_raw(string_view)
+        +shutdown(optional<notification>)
+        +close(error_info)
+    }
+    class vertical_session {
+        -role_ : vertical_role
+        -state_ : atomic<vertical_state>
+        +attach(connection)
+        +send(any_message) : expected<void, error_info>
+        +shutdown(optional<notification>)
+    }
+    class configuration_session {
+        -handlers_ : handlers
+        +attach(connection)
+        +shutdown()
+    }
+
+    class horizontal_state_chart <<namespace>> {
+        +next_state(channel_state, message) : optional<channel_state>
+        +is_anytime_message(message) : bool
+        +needs_transition(message) : bool
+        +role_may_send(horizontal_role, message) : bool
+        +role_may_receive(horizontal_role, message) : bool
+    }
+    class vertical_state_chart <<namespace>> {
+        +vertical_next_state(vertical_state, message) : optional<vertical_state>
+        +vertical_is_anytime_message(message) : bool
+        +vertical_role_may_send(vertical_role, message) : bool
+    }
+}
+
+package "facades" {
+    class downstream::impl
+    class upstream::impl
+    class vertical_service::impl
+    class vertical_client::impl
+    class configuration_service::impl
+}
+
+connection *-- frame_extractor
+io_runner o-- connection : runs on
+connector ..> connection : creates on connect
+acceptor ..> connection : creates per accept
+
+downstream::impl *-- acceptor
+downstream::impl *-- horizontal_session
+downstream::impl *-- io_runner
+
+upstream::impl *-- connector
+upstream::impl *-- horizontal_session
+upstream::impl *-- io_runner
+
+vertical_service::impl *-- acceptor
+vertical_service::impl *-- vertical_session
+vertical_service::impl *-- io_runner
+
+vertical_client::impl *-- connector
+vertical_client::impl *-- vertical_session
+vertical_client::impl *-- io_runner
+
+configuration_service::impl *-- acceptor
+configuration_service::impl *-- configuration_session
+configuration_service::impl *-- io_runner
+
+horizontal_session *-- connection
+horizontal_session ..> horizontal_state_chart
+vertical_session *-- connection
+vertical_session ..> vertical_state_chart
+configuration_session *-- connection
+
+@enduml

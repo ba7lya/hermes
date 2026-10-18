@@ -1,0 +1,55 @@
+# SPDX-License-Identifier: MIT
+#
+# Installs the Clang majors the Linux presets name. The apt.llvm.org repository is the same
+# source for every version, so the package list is built from one input.
+name: setup clang
+description: Install the requested Clang majors and Ninja on Ubuntu.
+
+inputs:
+  versions:
+    description: Space-separated Clang major versions, for example "17 18 19".
+    required: false
+    default: '19'
+  multilib:
+    description: Also install 32-bit support for the x86 presets.
+    required: false
+    default: 'false'
+
+runs:
+  using: composite
+  steps:
+    - name: install clang
+      shell: bash
+      run: |
+        wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc > /dev/null
+        for version in ${{ inputs.versions }}; do
+          echo "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-${version} main" | sudo tee "/etc/apt/sources.list.d/llvm${version}.list" > /dev/null
+        done
+        sudo apt-get update
+        packages=()
+        needs_gcc14_multilib=false
+        for version in ${{ inputs.versions }}; do
+          packages+=("clang-${version}")
+          if [ "${version}" -lt 19 ]; then
+            # Clang 17/18 cannot compile GCC 14's C++23 tuple constructors; use the GCC 13
+            # libstdc++ headers and runtime for those compilers.
+            packages+=("g++-13" "libstdc++-13-dev")
+          else
+            needs_gcc14_multilib=true
+          fi
+        done
+        if [ "${{ inputs.multilib }}" = "true" ]; then
+          for version in ${{ inputs.versions }}; do
+            packages+=("libclang-rt-${version}-dev")
+            if [ "${version}" -lt 19 ]; then
+              packages+=("g++-13-multilib" "libc6-dev-i386")
+            fi
+          done
+          if [ "$needs_gcc14_multilib" = "true" ]; then
+            packages+=("gcc-multilib" "g++-multilib" "libc6-dev-i386" "lib32asan8" "lib32ubsan1")
+          fi
+        fi
+        sudo apt-get install -y "${packages[@]}" ninja-build
+        set -- ${{ inputs.versions }}
+        echo "CC=clang-$1" >> "$GITHUB_ENV"
+        echo "CXX=clang++-$1" >> "$GITHUB_ENV"

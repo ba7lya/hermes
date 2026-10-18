@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: MIT
+#
+# Runs the benchmark and one example from the build tree. The caller decides whether the
+# configuration is instrumented and therefore should skip the smoke run.
+name: smoke the benchmark and an example
+description: Run the benchmark and the downstream/upstream example from a build tree.
+
+inputs:
+  preset:
+    description: Configure preset that produced the build.
+    required: true
+  config:
+    description: Configuration to smoke-test.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: run the benchmark and example
+      shell: bash
+      run: |
+        suffix=""
+        if [ "$RUNNER_OS" = "Windows" ]; then
+          suffix=".exe"
+        fi
+        "./build/${{ inputs.preset }}/benchmarks/${{ inputs.config }}/ba7lya.hermes_benchmark${suffix}" --benchmark_min_time=0.01s
+        "./build/${{ inputs.preset }}/examples/${{ inputs.config }}/downstream_upstream_pair${suffix}"
